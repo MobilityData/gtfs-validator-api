@@ -1,0 +1,455 @@
+openapi: 3.1.0
+
+info:
+  title: GTFS Validator API
+  version: 2.0.0
+  summary: Synchronous HTTP API for the MobilityData Canonical GTFS Schedule Validator.
+  description: |
+    Simplified synchronous API. Submit a GTFS feed and receive the full
+    validation report in a single response. Three endpoints are provided:
+
+    - `GET /metadata` — retrieve service metadata (validator version, limits, features).
+    - `POST /validate` — validate a feed by URL.
+    - `POST /validate-upload` — validate a feed by uploading a ZIP.
+
+    Both endpoints block until validation completes. Use the `Accept`
+    request header to choose the response format:
+
+    - `Accept: application/json` (default) — returns the structured JSON
+      validation report (`ValidationReport`).
+    - `Accept: text/html` — returns the rendered HTML report as a document.
+
+    Any other `Accept` value results in `406 Not Acceptable`.
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+  contact:
+    name: MobilityData
+    url: https://github.com/MobilityData/gtfs-validator
+
+servers:
+  - url: https://api.gtfs-validator.mobilitydata.org/v2
+    description: Production
+  - url: http://localhost:8080/v2
+    description: Local development
+
+tags:
+  - name: Metadata
+    description: Service information and capabilities.
+  - name: Validation
+    description: Submit a GTFS feed and receive a validation report.
+
+paths:
+
+  /metadata:
+    get:
+      tags: [Metadata]
+      operationId: getMetadata
+      summary: Retrieve service metadata.
+      description: |
+        Returns information about the running validator service: the
+        validator version, build timestamp, supported GTFS feature list,
+        and any configurable limits (max upload size, rate-limit ceiling).
+        No authentication required.
+      responses:
+        '200':
+          description: Service metadata.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceMetadata' }
+
+  /validate:
+    post:
+      tags: [Validation]
+      operationId: validateByUrl
+      summary: Validate a GTFS feed by URL.
+      description: |
+        Fetches the GTFS ZIP from `url` and runs validation. Blocks until
+        complete and returns the full validation report.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url:
+                  type: string
+                  format: uri
+                  description: Public URL to a GTFS ZIP.
+                countryCode:
+                  type: string
+                  pattern: '^[A-Za-z]{2}$'
+                  description: |
+                    ISO 3166-1 alpha-2 country code used for phone-number
+                    validation, e.g. `CA`, `US`, `nl`. Case-insensitive.
+              additionalProperties: false
+            examples:
+              minimal:
+                summary: URL only
+                value:
+                  url: https://example.org/gtfs.zip
+              withCountry:
+                summary: URL with country code
+                value:
+                  url: https://example.org/gtfs.zip
+                  countryCode: CA
+      responses:
+        '200':
+          description: Validation complete.
+          headers:
+            Content-Type:
+              description: Matches the negotiated `Accept` header.
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationReport' }
+            text/html:
+              schema:
+                type: string
+                description: Rendered HTML validation report.
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '406': { $ref: '#/components/responses/NotAcceptable' }
+        '422': { $ref: '#/components/responses/UnprocessableFeed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /validate-upload:
+    post:
+      tags: [Validation]
+      operationId: validateByUpload
+      summary: Validate a GTFS feed by uploading a ZIP.
+      description: |
+        Accepts a GTFS ZIP as a `multipart/form-data` upload. Blocks until
+        validation completes and returns the full validation report.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The GTFS ZIP file to validate.
+                countryCode:
+                  type: string
+                  pattern: '^[A-Za-z]{2}$'
+                  description: |
+                    ISO 3166-1 alpha-2 country code used for phone-number
+                    validation, e.g. `CA`, `US`, `nl`. Case-insensitive.
+              additionalProperties: false
+      responses:
+        '200':
+          description: Validation complete.
+          headers:
+            Content-Type:
+              description: Matches the negotiated `Accept` header.
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationReport' }
+            text/html:
+              schema:
+                type: string
+                description: Rendered HTML validation report.
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '406': { $ref: '#/components/responses/NotAcceptable' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '422': { $ref: '#/components/responses/UnprocessableFeed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+components:
+
+  schemas:
+
+    ServiceMetadata:
+      type: object
+      required: [validatorVersion]
+      description: Static information about the running validator service.
+      properties:
+        validatorVersion:
+          type: string
+          description: Validator release version, e.g. `7.1.0`.
+        commitHash:
+          type: string
+          example: 8635fdac4fbff025b4eaca6972fcc9504bc1552d
+        limits:
+          type: object
+          description: Configurable service limits.
+          properties:
+            maxUploadBytes:
+              type: integer
+              description: Maximum accepted upload size in bytes.
+            maxRequestsPerMinute:
+              type: integer
+              description: Rate-limit ceiling (requests per minute per IP).
+          additionalProperties: false
+      additionalProperties: false
+
+    ValidationReport:
+      type: object
+      description: |
+        Full validator report. Mirrors the structure of `report.json`
+        produced by the MobilityData canonical GTFS Schedule Validator CLI.
+      properties:
+        summary:
+          $ref: '#/components/schemas/ValidationSummary'
+        notices:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notice'
+      additionalProperties: true
+
+    ValidationSummary:
+      type: object
+      description: |
+        Metadata about the validation run: validator version, feed info,
+        agency list, included files, entity counts, and detected features.
+      properties:
+        validatorVersion:
+          type: string
+          description: Version of the validator that produced this report, e.g. `7.1.0`.
+        validatedAt:
+          type: string
+          format: date-time
+          description: Timestamp when validation completed.
+        gtfsInput:
+          type: string
+          description: Path or URL of the GTFS ZIP that was validated.
+        threads:
+          type: integer
+          description: Number of threads the validator used.
+        outputDirectory:
+          type: string
+          description: Server-side output directory (internal detail).
+        systemErrorsReportName:
+          type: string
+          description: Filename of the system errors report, typically `system_errors.json`.
+        validationReportName:
+          type: string
+          description: Filename of the JSON report, typically `report.json`.
+        htmlReportName:
+          type: string
+          description: Filename of the HTML report, typically `report.html`.
+        countryCode:
+          type: string
+          description: Country code used for validation. `ZZ` indicates none was provided.
+        dateForValidation:
+          type: string
+          format: date
+          description: The date used for time-dependent validation rules.
+        feedInfo:
+          $ref: '#/components/schemas/FeedInfo'
+        agencies:
+          type: array
+          description: Transit agencies found in `agency.txt`.
+          items:
+            $ref: '#/components/schemas/AgencyInfo'
+        files:
+          type: array
+          description: List of GTFS files included in the ZIP.
+          items:
+            type: string
+          examples:
+            - - agency.txt
+              - routes.txt
+              - stops.txt
+              - trips.txt
+              - stop_times.txt
+        validationTimeSeconds:
+          type: number
+          description: Wall-clock time spent on validation, in seconds.
+        memoryUsageRecords:
+          type: array
+          description: Memory usage snapshots at key stages of validation.
+          items:
+            $ref: '#/components/schemas/MemoryUsageRecord'
+        counts:
+          $ref: '#/components/schemas/EntityCounts'
+        gtfsFeatures:
+          type: array
+          description: |
+            Detected GTFS features such as `Shapes`, `Feed Information`,
+            `Route Colors`, `Headsigns`, `Fares V2`, `Flex`, `Pathways`.
+          items:
+            type: string
+
+    FeedInfo:
+      type: object
+      description: Metadata from `feed_info.txt`, plus derived fields.
+      properties:
+        publisherName:
+          type: string
+          description: Value of `feed_publisher_name`.
+        publisherUrl:
+          type: string
+          format: uri
+          description: Value of `feed_publisher_url`.
+        feedLanguage:
+          type: string
+          description: Human-readable language name derived from `feed_lang`.
+        feedStartDate:
+          type: string
+          format: date
+          description: Value of `feed_start_date`.
+        feedEndDate:
+          type: string
+          format: date
+          description: Value of `feed_end_date`.
+        feedEmail:
+          type: string
+          format: email
+          description: Value of `feed_contact_email`, if present.
+        feedServiceWindowStart:
+          type: string
+          format: date
+          description: Value of `feedServiceWindowStart`.
+        feedServiceWindowEnd:
+          type: string
+          format: date
+          description: Value of `feedServiceWindowEnd`.
+
+    AgencyInfo:
+      type: object
+      description: Details of a transit agency from `agency.txt`.
+      properties:
+        name:
+          type: string
+          description: Agency name.
+        url:
+          type: string
+          format: uri
+          description: Agency website URL.
+        phone:
+          type: string
+          description: Agency phone number. Empty string if not provided.
+        email:
+          type: string
+          description: Agency email address. Empty string if not provided.
+        timezone:
+          type: string
+          description: IANA timezone, e.g. `Europe/Warsaw`, `America/Toronto`.
+
+    MemoryUsageRecord:
+      type: object
+      description: Memory usage snapshot at a particular validation stage.
+      properties:
+        key:
+          type: string
+          description: Stage identifier, e.g. `GtfsFeedLoader.loadTables`.
+        totalMemory:
+          type: integer
+        freeMemory:
+          type: integer
+        maxMemory:
+          type: integer
+        diffMemory:
+          type: integer
+          description: Change in used memory since the previous record.
+
+    EntityCounts:
+      type: object
+      description: |
+        Counts of entities found in the feed as well as validation notice
+        totals. Keys for entity types (Agencies, Routes, Stops, etc.) are
+        capitalized to match the validator's output.
+      properties:
+        Agencies:
+          type: integer
+          minimum: 0
+        Routes:
+          type: integer
+          minimum: 0
+        Stops:
+          type: integer
+          minimum: 0
+        Trips:
+          type: integer
+          minimum: 0
+        Shapes:
+          type: integer
+          minimum: 0
+        Blocks:
+          type: integer
+          minimum: 0
+      additionalProperties:
+        type: integer
+        description: Other entity counts the validator may report.
+
+    Notice:
+      type: object
+      required: [code, severity, totalNotices]
+      description: A validation notice emitted by the validator.
+      properties:
+        code:
+          type: string
+          description: Notice code, e.g. `missing_required_field`.
+        severity:
+          type: string
+          enum: [ERROR, WARNING, INFO]
+        totalNotices:
+          type: integer
+          minimum: 1
+          description: How many times this notice was emitted.
+        sampleNotices:
+          type: array
+          description: |
+            Up to N example occurrences with field-level context. Shape
+            depends on the rule and is passed through from the validator.
+          items:
+            type: object
+            additionalProperties: true
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: |
+            Stable machine-readable error code, e.g. `invalid_url`,
+            `download_failed`, `unsupported_archive`, `validator_crashed`.
+        message:
+          type: string
+          description: Human-readable explanation, safe to show end users.
+        details:
+          type: object
+          additionalProperties: true
+          description: Optional structured detail.
+
+  responses:
+    BadRequest:
+      description: Request validation failed.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    UnprocessableFeed:
+      description: The feed was downloaded or received but could not be validated (e.g. corrupt ZIP, not a valid GTFS archive).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    PayloadTooLarge:
+      description: The uploaded file exceeds the configured size limit.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotAcceptable:
+      description: |
+        The `Accept` header specifies a media type that is not supported.
+        Supported types are `application/json` and `text/html`.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: Too many requests.
+      headers:
+        Retry-After:
+          schema: { type: integer }
+          description: Seconds to wait before retrying.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
