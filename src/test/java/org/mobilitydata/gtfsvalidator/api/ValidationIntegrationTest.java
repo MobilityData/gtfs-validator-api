@@ -107,4 +107,24 @@ class ValidationIntegrationTest {
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.code").value("invalid_url"));
   }
+
+  @Test
+  void wrongContentTypeReturns415() throws Exception {
+    mockMvc
+        .perform(
+            post("/v2/validate-upload")
+                .contentType(MediaType.TEXT_PLAIN)
+                .accept(MediaType.APPLICATION_JSON)
+                .content("not a multipart body"))
+        .andExpect(status().isUnsupportedMediaType())
+        .andExpect(jsonPath("$.code").value("unsupported_media_type"));
+  }
+
+  @Test
+  void missingFilePartReturns400() throws Exception {
+    mockMvc
+        .perform(multipart("/v2/validate-upload").accept(MediaType.APPLICATION_JSON))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("bad_request"));
+  }
 }

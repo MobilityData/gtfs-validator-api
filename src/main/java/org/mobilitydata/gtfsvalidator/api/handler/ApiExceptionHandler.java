@@ -21,11 +21,16 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.HttpMediaTypeNotAcceptableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.bind.ServletRequestBindingException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /** Maps exceptions to the API {@code Error} response schema. */
@@ -82,6 +87,33 @@ public class ApiExceptionHandler {
   public ResponseEntity<Error> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {
     return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
         .body(error("method_not_allowed", ex.getMessage()));
+  }
+
+  @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+  public ResponseEntity<Error> handleUnsupportedMediaType(HttpMediaTypeNotSupportedException ex) {
+    return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+        .body(
+            error(
+                "unsupported_media_type",
+                "Unsupported Content-Type. Upload the feed as multipart/form-data with a 'file'"
+                    + " part (let your client set the multipart boundary; do not set the"
+                    + " Content-Type header manually)."));
+  }
+
+  @ExceptionHandler({
+    MultipartException.class,
+    MissingServletRequestPartException.class,
+    MissingServletRequestParameterException.class,
+    ServletRequestBindingException.class
+  })
+  public ResponseEntity<Error> handleBadMultipart(Exception ex) {
+    logger.debug("Bad multipart request: {}", ex.getMessage());
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+        .body(
+            error(
+                "bad_request",
+                "Malformed multipart request. Send multipart/form-data with a 'file' part"
+                    + " containing the GTFS ZIP, e.g. curl --form 'file=@feed.zip'."));
   }
 
   @ExceptionHandler(Exception.class)
