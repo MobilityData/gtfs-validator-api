@@ -23,11 +23,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
@@ -40,9 +45,43 @@ class ValidationIntegrationTest {
 
   @Autowired private MockMvc mockMvc;
 
+  /**
+   * Builds a minimal valid GTFS feed as an in-memory ZIP. Generating the fixture at runtime keeps
+   * the test self-contained and avoids committing a binary artifact to the repository.
+   */
   private MockMultipartFile demoFeed() throws Exception {
-    byte[] bytes = new ClassPathResource("demo-gtfs.zip").getInputStream().readAllBytes();
-    return new MockMultipartFile("file", "demo-gtfs.zip", "application/zip", bytes);
+    Map<String, String> files = new LinkedHashMap<>();
+    files.put(
+        "agency.txt",
+        "agency_id,agency_name,agency_url,agency_timezone\n"
+            + "1,Demo Transit,https://example.com,America/Toronto\n");
+    files.put(
+        "calendar.txt",
+        "service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\n"
+            + "WK,1,1,1,1,1,0,0,20240101,20241231\n");
+    files.put(
+        "routes.txt",
+        "route_id,agency_id,route_short_name,route_long_name,route_type\n"
+            + "R1,1,1,Demo Route,3\n");
+    files.put(
+        "stop_times.txt",
+        "trip_id,arrival_time,departure_time,stop_id,stop_sequence\n"
+            + "T1,08:00:00,08:00:00,S1,1\n"
+            + "T1,08:10:00,08:10:00,S2,2\n");
+    files.put(
+        "stops.txt",
+        "stop_id,stop_name,stop_lat,stop_lon\nS1,Stop 1,45.5,-73.5\nS2,Stop 2,45.6,-73.6\n");
+    files.put("trips.txt", "route_id,service_id,trip_id\nR1,WK,T1\n");
+
+    ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+    try (ZipOutputStream zip = new ZipOutputStream(buffer)) {
+      for (Map.Entry<String, String> entry : files.entrySet()) {
+        zip.putNextEntry(new ZipEntry(entry.getKey()));
+        zip.write(entry.getValue().getBytes(StandardCharsets.UTF_8));
+        zip.closeEntry();
+      }
+    }
+    return new MockMultipartFile("file", "demo-gtfs.zip", "application/zip", buffer.toByteArray());
   }
 
   @Test
