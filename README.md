@@ -153,6 +153,12 @@ docker run -e SPRING_PROFILES_ACTIVE=json -p 8080:8080 gtfs-validator-api:1.0.0
 Implemented with Spring Boot's built-in [structured logging](https://docs.spring.io/spring-boot/reference/features/logging.html#features.logging.structured)
 (no extra dependencies); see `JsonLogFormatter` and `application-json.properties`.
 
+Logs from the validator core and other libraries are captured in the same format:
+the core logs via Flogger/`java.util.logging`, which Spring Boot bridges to SLF4J →
+Logback → this formatter. (The pom excludes the stray `commons-logging` jar pulled in
+by `commons-validator` so JCL is handled by `spring-jcl` and not emitted as raw,
+non-JSON lines.)
+
 ## Project layout
 
 ```

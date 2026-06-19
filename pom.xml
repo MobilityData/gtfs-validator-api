@@ -136,6 +136,16 @@
             <groupId>org.mobilitydata.gtfs-validator</groupId>
             <artifactId>gtfs-validator-main</artifactId>
             <version>${gtfs-validator.version}</version>
+            <exclusions>
+                <!-- commons-logging (via commons-validator) clashes with Spring's
+                     spring-jcl and prints raw, non-JSON lines to the console. Exclude it
+                     so spring-jcl supplies the JCL API and routes it through SLF4J/Logback
+                     (and the structured JSON formatter under the json profile). -->
+                <exclusion>
+                    <groupId>commons-logging</groupId>
+                    <artifactId>commons-logging</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <!-- main declares core/model as runtime scope; we compile against them
              (e.g. CountryCode in core), so declare them explicitly at compile scope. -->
@@ -143,6 +153,12 @@
             <groupId>org.mobilitydata.gtfs-validator</groupId>
             <artifactId>gtfs-validator-core</artifactId>
             <version>${gtfs-validator.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>commons-logging</groupId>
+                    <artifactId>commons-logging</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.mobilitydata.gtfs-validator</groupId>
