@@ -87,7 +87,7 @@ public class ValidationService {
       return validate(uploadFile.toUri(), countryCode);
     } catch (IOException e) {
       throw new ApiException(
-          HttpStatus.UNPROCESSABLE_ENTITY,
+          HttpStatus.UNPROCESSABLE_CONTENT,
           "unprocessable_feed",
           "Could not read the uploaded feed.",
           e);
@@ -119,7 +119,7 @@ public class ValidationService {
       ValidationRunner.Status status = runner.run(configBuilder.build());
       if (status != ValidationRunner.Status.SUCCESS) {
         throw new ApiException(
-            HttpStatus.UNPROCESSABLE_ENTITY,
+            HttpStatus.UNPROCESSABLE_CONTENT,
             "unprocessable_feed",
             "The feed could not be validated. It may be corrupt or not a valid GTFS archive.");
       }
@@ -128,7 +128,7 @@ public class ValidationService {
       Path htmlReport = outputDirectory.resolve(HTML_REPORT_NAME);
       if (!Files.exists(jsonReport)) {
         throw new ApiException(
-            HttpStatus.UNPROCESSABLE_ENTITY,
+            HttpStatus.UNPROCESSABLE_CONTENT,
             "validator_crashed",
             "The validator did not produce a report for the feed.");
       }
@@ -140,7 +140,7 @@ public class ValidationService {
       throw e;
     } catch (IOException e) {
       throw new ApiException(
-          HttpStatus.UNPROCESSABLE_ENTITY,
+          HttpStatus.UNPROCESSABLE_CONTENT,
           "unprocessable_feed",
           "An error occurred while validating the feed.",
           e);

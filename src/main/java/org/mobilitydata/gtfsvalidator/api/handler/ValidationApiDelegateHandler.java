@@ -72,7 +72,7 @@ public class ValidationApiDelegateHandler implements ValidationApiDelegate {
       return toResponse(reports);
     } catch (IOException e) {
       throw new ApiException(
-          HttpStatus.UNPROCESSABLE_ENTITY,
+          HttpStatus.UNPROCESSABLE_CONTENT,
           "unprocessable_feed",
           "Could not read the uploaded feed.",
           e);
@@ -89,7 +89,7 @@ public class ValidationApiDelegateHandler implements ValidationApiDelegate {
     if (wantsHtml()) {
       if (reports.html() == null) {
         throw new ApiException(
-            HttpStatus.UNPROCESSABLE_ENTITY,
+            HttpStatus.UNPROCESSABLE_CONTENT,
             "validator_crashed",
             "The validator did not produce an HTML report for the feed.");
       }
