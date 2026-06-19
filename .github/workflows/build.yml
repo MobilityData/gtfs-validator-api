@@ -7,7 +7,6 @@ on:
   pull_request:
     branches:
       - main
-  workflow_dispatch:
 
 env:
   java_version: '17'
@@ -16,9 +15,9 @@ env:
 jobs:
   maven-build:
     name: Maven build, test and code-style check
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Set up JDK ${{ env.java_version }}-${{ env.java_distribution }}
@@ -29,7 +28,7 @@ jobs:
       - name: Print Java and Maven versions
         run: mvn --version
       - name: Cache Maven dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
@@ -43,7 +42,7 @@ jobs:
         run: mvn --batch-mode -ntp clean verify
       - name: Upload build artifact
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: gtfs-validator-api-jar
           path: target/*.jar
