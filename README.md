@@ -132,12 +132,34 @@ Key properties (see `src/main/resources/application.properties`):
 | `gtfs.validator.limits.max-upload-bytes` | _(unset)_ | `maxUploadBytes` advertised in `/metadata`. |
 | `gtfs.validator.limits.max-requests-per-minute` | _(unset)_ | `maxRequestsPerMinute` advertised in `/metadata`. |
 
+## Logging
+
+By default the service logs human-readable plain text to the console — convenient for
+local development. Activate the `json` profile to switch the console to **structured
+JSON** (one object per line, with `severity`, `message`, ISO-8601 `timestamp`, logger,
+thread, MDC values and structured key/value pairs; exception stack traces are folded
+into `message`). This format is understood by cloud log aggregators that parse stdout.
+
+```bash
+# Local: plain text (default, no profile)
+mvn spring-boot:run
+
+# Structured JSON (e.g. in a container / cloud)
+SPRING_PROFILES_ACTIVE=json java -jar target/gtfs-validator-api-*.jar
+# or in Docker:
+docker run -e SPRING_PROFILES_ACTIVE=json -p 8080:8080 gtfs-validator-api:1.0.0
+```
+
+Implemented with Spring Boot's built-in [structured logging](https://docs.spring.io/spring-boot/reference/features/logging.html#features.logging.structured)
+(no extra dependencies); see `JsonLogFormatter` and `application-json.properties`.
+
 ## Project layout
 
 ```
 docs/GTFSValidatorAPI.yaml                  # OpenAPI single source of truth (generator input + served spec)
 src/main/java/.../api/Application.java       # Spring Boot entry point
 src/main/java/.../api/handler/              # delegate handlers + validator integration
+src/main/java/.../api/logging/              # structured JSON log formatter (json profile)
 target/generated-sources/openapi/           # generated API interfaces + models
 target/classes/static/GTFSValidatorAPI.yaml # spec copied here at build time, served at /GTFSValidatorAPI.yaml
 ```

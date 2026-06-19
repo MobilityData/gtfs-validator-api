@@ -25,11 +25,9 @@ info:
     url: https://www.apache.org/licenses/LICENSE-2.0
   contact:
     name: MobilityData
-    url: https://github.com/MobilityData/gtfs-validator
+    url: https://github.com/MobilityData/gtfs-validator-api
 
 servers:
-  - url: https://api.gtfs-validator.mobilitydata.org/v2
-    description: Production
   - url: http://localhost:8080/v2
     description: Local development
 
