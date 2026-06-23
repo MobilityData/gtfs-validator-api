@@ -35,6 +35,10 @@ public class ValidatorConfiguration {
 
   @Bean
   public ValidationRunner validationRunner(VersionResolver versionResolver) {
+    //   Warning: ValidationRunner is not thread safe.
+    //    Calling the service in a concurrent scenario may lead to unexpected
+    //    memory usage report, validation rules and the rest of the report is not compromised.
+    //    see: https://github.com/MobilityData/gtfs-validator/issues/2168
     return new ValidationRunner(versionResolver);
   }
 }
