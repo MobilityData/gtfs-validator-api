@@ -17,9 +17,16 @@ The API project version is **independent** of the validator core version:
 
 | Version | Where | Current |
 |---------|-------|---------|
-| API project version | `pom.xml` | `1.0.0` |
+| API project version | git tag `vX.Y.Z` (derived at build time) | see releases |
 | Validator core (dependency) | `gtfs-validator.version` property | `8.0.1` |
 | OpenAPI spec version | `docs/GTFSValidatorAPI.yaml` `info.version` | `2.0.0` |
+
+The API project version is **derived from git** by the
+[`maven-git-versioning-extension`](https://github.com/qoomon/maven-git-versioning-extension)
+(configured in `.mvn/`): a release tag `vX.Y.Z` yields version `X.Y.Z`, while any
+other build (commits on `main`, PRs, local checkouts) yields `0.0.0-SNAPSHOT`. The
+`<version>` in `pom.xml` is only a placeholder and is never edited for a release —
+see [Releasing](#releasing).
 
 The validator core version is reported at runtime by `GET /v2/metadata`.
 
@@ -132,27 +139,122 @@ docker build --build-arg MAVEN_PROFILES=snapshot -t gtfs-validator-api:snapshot 
 ### Pre-built image
 
 CI publishes multi-arch images (`linux/amd64`, `linux/arm64`) to the GitHub
-Container Registry on every push to the default branch and on version tags. Two
-variants are published:
+Container Registry. The image tag encodes both the API version (derived from the
+git tag) and the validator core version. Two variants are published per build:
 
-| Variant | Tags | Validator core |
-|---------|------|----------------|
-| Stable | `latest`, `1.0.0-validator8.0.1` | stable release |
-| Snapshot | `1.0.0-validator8.0.2-SNAPSHOT` | pre-release SNAPSHOT |
+| Variant | Example release tag | Example main-merge tag | Validator core |
+|---------|--------------------|------------------------|----------------|
+| Stable (`stable-core`) | `1.0.0-validator8.0.1` (+ `latest`) | `0.0.0-SNAPSHOT-validator8.0.1` | stable release |
+| Snapshot (`snapshot-core`) | `1.0.0-validator8.0.2-SNAPSHOT` | `0.0.0-SNAPSHOT-validator8.0.2-SNAPSHOT` | pre-release SNAPSHOT |
 
 The tag format is `<apiVersion>-validator<validatorCoreVersion>`: the `validator`
 infix scopes the trailing version to the validator **core**, not the API (the two
-versions evolve independently). `latest` always points at the stable variant; the
-snapshot image is never tagged `latest`.
+versions evolve independently). Both variants are published on every merge to
+`main` (as API snapshots, version `0.0.0-SNAPSHOT`) and on every release (versioned
+`X.Y.Z`); the stable variant additionally gets `latest` on releases only. The
+snapshot variant is never tagged `latest`. See [Releasing](#releasing) for how
+versions are produced.
+
+#### Using the published images
+
+The images live at `ghcr.io/mobilitydata/gtfs-validator-api`. They are public, so
+no login is required to pull. Browse all available tags on the
+[package page](https://github.com/MobilityData/gtfs-validator-api/pkgs/container/gtfs-validator-api).
+
+**Stable** — recommended for normal use; built against a released validator core:
 
 ```bash
-# Stable
+# `latest` always points at the most recent release
 docker pull ghcr.io/mobilitydata/gtfs-validator-api:latest
 docker run --rm -p 8080:8080 ghcr.io/mobilitydata/gtfs-validator-api:latest
 
-# Snapshot (built against the validator core SNAPSHOT)
-docker pull ghcr.io/mobilitydata/gtfs-validator-api:1.0.0-validator8.0.2-SNAPSHOT
+# …or pin an exact, immutable version
+docker run --rm -p 8080:8080 \
+  ghcr.io/mobilitydata/gtfs-validator-api:1.0.0-validator8.0.1
 ```
+
+**Snapshot** — for trying the latest validator core before it is released; built
+against a `-SNAPSHOT` of the validator. The tag is re-published as the upstream
+snapshot moves, so re-pull to get the newest build:
+
+```bash
+docker pull ghcr.io/mobilitydata/gtfs-validator-api:1.0.0-validator8.0.2-SNAPSHOT
+docker run --rm -p 8080:8080 \
+  ghcr.io/mobilitydata/gtfs-validator-api:1.0.0-validator8.0.2-SNAPSHOT
+```
+
+Once a container is running, the API is available on port `8080` regardless of
+which image you chose:
+
+```bash
+# Confirm which validator core the running image uses
+curl http://localhost:8080/v2/metadata
+
+# Validate a feed
+curl -X POST http://localhost:8080/v2/validate-upload \
+  -F "file=@feed.zip" -F "countryCode=CA" -H "Accept: application/json"
+```
+
+Pass JVM options via `JAVA_OPTS`, e.g. `-e JAVA_OPTS="-Xmx4g"`, and activate the
+structured-logging profile with `-e SPRING_PROFILES_ACTIVE=json`. If you have
+pinned the package to **private** visibility, authenticate first:
+
+```bash
+echo "$GITHUB_TOKEN" | docker login ghcr.io -u <username> --password-stdin
+```
+
+## Releasing
+
+The API version is **derived from the git tag** at build time by the
+[`maven-git-versioning-extension`](https://github.com/qoomon/maven-git-versioning-extension)
+(see `.mvn/`); `pom.xml` keeps the placeholder `0.0.0-SNAPSHOT` and is **never**
+edited by hand for a release. To cut a release and publish images:
+
+1. Make sure `main` is green and the desired changes are merged.
+2. Create and push a semver tag prefixed with `v`:
+
+   ```bash
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+
+   (Or publish a GitHub Release with that tag — either triggers the same flow.)
+3. The `docker.yml` workflow then builds both variants and **publishes**:
+   - stable: `ghcr.io/<owner>/gtfs-validator-api:1.0.0-validator<core>` **and** `:latest`
+   - snapshot: `ghcr.io/<owner>/gtfs-validator-api:1.0.0-validator<coreSnapshot>`
+
+Notes:
+- Every merge to `main` publishes both variants as **API snapshots** (version
+  `0.0.0-SNAPSHOT`, e.g. `0.0.0-SNAPSHOT-validator8.0.1`), without moving `latest`.
+- A release (`v*` tag / GitHub Release) publishes both variants **versioned**
+  (`X.Y.Z-…`); the stable variant also updates `latest`.
+- Pull requests build both variants to validate the Dockerfile but publish nothing.
+- The tag must match `v` + semver (e.g. `v1.2.3`); other tags don't set the version.
+
+### What gets published when
+
+Image tags follow `<apiVersion>-validator<validatorCoreVersion>`. The **API version**
+comes from git (a release tag, or `0.0.0-SNAPSHOT` otherwise) and the **validator
+core version** comes from the build variant. These are independent: a `main` build
+is an *API snapshot*, which is not the same thing as the validator-core snapshot.
+
+**On merge to `main`** the API version resolves to `0.0.0-SNAPSHOT`, so both variants
+publish as API snapshots (and `latest` is not moved):
+
+| Variant | Tag |
+|---------|-----|
+| stable-core | `0.0.0-SNAPSHOT-validator8.0.1` |
+| snapshot-core | `0.0.0-SNAPSHOT-validator8.0.2-SNAPSHOT` |
+
+**On release** (`vX.Y.Z` tag / GitHub Release) the API version resolves to `X.Y.Z`:
+
+| Variant | Tag |
+|---------|-----|
+| stable-core | `X.Y.Z-validator8.0.1` **+ `latest`** |
+| snapshot-core | `X.Y.Z-validator8.0.2-SNAPSHOT` |
+
+**On pull requests** both variants build (to validate the Dockerfile) but nothing is
+published.
 
 ## Continuous integration
 
@@ -161,7 +263,7 @@ GitHub Actions workflows live in `.github/workflows/`:
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
 | `build.yml` | push / PR to `main`/`master`, manual | `mvn clean verify` — OpenAPI generation, compile, integration tests and the Spotless code-style check; uploads the built jar. |
-| `docker.yml` | push / PR / tag `v*` / release, manual | Builds two image variants (stable and validator-SNAPSHOT) via a matrix, multi-arch. On non-PR events it pushes to `ghcr.io/<owner>/gtfs-validator-api`; stable gets `latest` + `<api>-validator<core>`, snapshot gets `<api>-validator<core>` only. PRs build both but push neither. |
+| `docker.yml` | push / PR / tag `v*` / release, manual | Builds two image variants (stable and validator-SNAPSHOT) via a matrix, multi-arch. On non-PR events it pushes to `ghcr.io/<owner>/gtfs-validator-api` tagged `<api>-validator<core>`: `main` merges publish API snapshots (`0.0.0-SNAPSHOT-…`), releases publish versioned images with `latest` on the stable variant. PRs build both but push neither. See [Releasing](#releasing). |
 
 ## Configuration
 
