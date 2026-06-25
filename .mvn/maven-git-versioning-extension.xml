@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Git versioning rules for me.qoomon:maven-git-versioning-extension.
+
+     The release tag is the single source of truth: a git tag `vX.Y.Z` produces
+     project version `X.Y.Z`. Any other build (commits on main, PRs, or local
+     checkouts without a release tag) produces `0.0.0-SNAPSHOT`. pom.xml keeps
+     the placeholder version `0.0.0-SNAPSHOT` and is never edited for a release.
+
+     The API version stays independent of the validator core version. -->
+<configuration xmlns="https://github.com/qoomon/maven-git-versioning-extension"
+               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xsi:schemaLocation="https://github.com/qoomon/maven-git-versioning-extension https://qoomon.github.io/maven-git-versioning-extension/configuration-9.4.0.xsd">
+
+    <refs>
+        <!-- Release tags like v1.0.0 -> version 1.0.0 -->
+        <ref type="tag">
+            <pattern><![CDATA[v(?<version>[0-9]+\.[0-9]+\.[0-9]+)]]></pattern>
+            <version>${ref.version}</version>
+        </ref>
+
+        <!-- Any branch (main, PRs, features) -> fixed dev SNAPSHOT version -->
+        <ref type="branch">
+            <pattern>.+</pattern>
+            <version>0.0.0-SNAPSHOT</version>
+        </ref>
+    </refs>
+
+    <!-- Fallback for detached HEAD / commit builds with no matching ref -->
+    <rev>
+        <version>0.0.0-SNAPSHOT</version>
+    </rev>
+</configuration>

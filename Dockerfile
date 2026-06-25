@@ -21,6 +21,14 @@ RUN mvn -B -q ${MAVEN_PROFILES:+-P}${MAVEN_PROFILES} clean package -DskipTests
 
 # --- Runtime stage -----------------------------------------------------------
 FROM eclipse-temurin:17-jre
+
+# Link the published GHCR package to its source repository so it appears in the
+# repo's Packages section (and inherits the repo for permissions/visibility).
+# Overridable so forks publish under their own repo: CI passes the lower-cased
+# ${{ github.repository }}. The default keeps local builds labelled sensibly.
+ARG IMAGE_SOURCE="https://github.com/mobilitydata/gtfs-validator-api.git"
+LABEL org.opencontainers.image.source="${IMAGE_SOURCE}"
+
 RUN groupadd -r spring && useradd -r -g spring spring
 
 WORKDIR /app

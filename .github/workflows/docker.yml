@@ -46,6 +46,11 @@ jobs:
       # drift from the actual build. Image name is lower-cased for GHCR.
       - name: Compute image tags
         id: tags
+        env:
+          # `latest` (and release semantics) only apply to actual releases:
+          # a pushed `v*` tag or a published release. Plain merges to main build
+          # a 0.0.0-SNAPSHOT dev image and must never move `latest`.
+          IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'release' }}
         run: |
           set -euo pipefail
           PROFILE_ARG=""
@@ -55,12 +60,16 @@ jobs:
           API_VERSION=$(mvn -q -N $PROFILE_ARG help:evaluate -Dexpression=project.version -DforceStdout)
           VALIDATOR_VERSION=$(mvn -q -N $PROFILE_ARG help:evaluate -Dexpression=gtfs-validator.version -DforceStdout)
           IMAGE=$(echo "${REGISTRY}/${IMAGE_NAME}" | tr '[:upper:]' '[:lower:]')
+          # Fork-aware OCI source URL (lower-cased) so the package links to the
+          # repo it was built from, not a hardcoded upstream.
+          REPO_LC=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
+          echo "image_source=https://github.com/${REPO_LC}.git" >> "$GITHUB_OUTPUT"
           # Self-documenting tag: <apiVersion>-validator<validatorCoreVersion>.
           # The `validator` infix scopes the trailing version to the validator
           # core, not the API (the two versions evolve independently).
           DUAL_TAG="${IMAGE}:${API_VERSION}-validator${VALIDATOR_VERSION}"
           TAGS="${DUAL_TAG}"
-          if [ "${{ matrix.latest }}" = "true" ]; then
+          if [ "${{ matrix.latest }}" = "true" ] && [ "$IS_RELEASE" = "true" ]; then
             TAGS="${TAGS}"$'\n'"${IMAGE}:latest"
           fi
           {
@@ -90,6 +99,7 @@ jobs:
           context: .
           build-args: |
             MAVEN_PROFILES=${{ matrix.maven_profiles }}
+            IMAGE_SOURCE=${{ steps.tags.outputs.image_source }}
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.tags.outputs.tags }}
