@@ -51,6 +51,26 @@ mvn test               # run the integration tests only
 mvn verify             # also runs the spotless code-style check
 ```
 
+### Building against a validator SNAPSHOT
+
+The default build uses the stable validator core release (`gtfs-validator.version`,
+currently `8.0.1`). To build against a pre-release **SNAPSHOT** of the validator
+core instead, activate the opt-in `snapshot` profile:
+
+```bash
+mvn -Psnapshot clean package      # uses the pinned snapshot (8.0.2-SNAPSHOT)
+
+# override the snapshot version explicitly:
+mvn -Psnapshot -Dgtfs-validator.version=8.0.2-SNAPSHOT clean package
+```
+
+The profile enables the public [Maven Central snapshot repository][central-snapshots]
+(no credentials needed) — required because Maven only resolves `-SNAPSHOT`
+artifacts from repositories that explicitly enable snapshots. The API's own
+version is unaffected; only the validator core dependency changes.
+
+[central-snapshots]: https://central.sonatype.com/repository/maven-snapshots/
+
 ## Code style
 
 Matches the [gtfs-validator](https://github.com/MobilityData/gtfs-validator) repo:
@@ -102,14 +122,36 @@ docker run --rm -p 8080:8080 gtfs-validator-api:1.0.0
 
 Pass JVM options via `JAVA_OPTS`, e.g. `-e JAVA_OPTS="-Xmx4g"`.
 
+To build an image against a validator-core SNAPSHOT, pass the `MAVEN_PROFILES`
+build arg:
+
+```bash
+docker build --build-arg MAVEN_PROFILES=snapshot -t gtfs-validator-api:snapshot .
+```
+
 ### Pre-built image
 
 CI publishes multi-arch images (`linux/amd64`, `linux/arm64`) to the GitHub
-Container Registry on every push to the default branch and on version tags:
+Container Registry on every push to the default branch and on version tags. Two
+variants are published:
+
+| Variant | Tags | Validator core |
+|---------|------|----------------|
+| Stable | `latest`, `1.0.0-validator8.0.1` | stable release |
+| Snapshot | `1.0.0-validator8.0.2-SNAPSHOT` | pre-release SNAPSHOT |
+
+The tag format is `<apiVersion>-validator<validatorCoreVersion>`: the `validator`
+infix scopes the trailing version to the validator **core**, not the API (the two
+versions evolve independently). `latest` always points at the stable variant; the
+snapshot image is never tagged `latest`.
 
 ```bash
+# Stable
 docker pull ghcr.io/mobilitydata/gtfs-validator-api:latest
 docker run --rm -p 8080:8080 ghcr.io/mobilitydata/gtfs-validator-api:latest
+
+# Snapshot (built against the validator core SNAPSHOT)
+docker pull ghcr.io/mobilitydata/gtfs-validator-api:1.0.0-validator8.0.2-SNAPSHOT
 ```
 
 ## Continuous integration
@@ -119,7 +161,7 @@ GitHub Actions workflows live in `.github/workflows/`:
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
 | `build.yml` | push / PR to `main`/`master`, manual | `mvn clean verify` — OpenAPI generation, compile, integration tests and the Spotless code-style check; uploads the built jar. |
-| `docker.yml` | push / PR / tag `v*` / release, manual | Builds the Docker image (multi-arch). On non-PR events it pushes to `ghcr.io/<owner>/gtfs-validator-api` with branch, `latest`, semver and commit-SHA tags. |
+| `docker.yml` | push / PR / tag `v*` / release, manual | Builds two image variants (stable and validator-SNAPSHOT) via a matrix, multi-arch. On non-PR events it pushes to `ghcr.io/<owner>/gtfs-validator-api`; stable gets `latest` + `<api>-validator<core>`, snapshot gets `<api>-validator<core>` only. PRs build both but push neither. |
 
 ## Configuration
 

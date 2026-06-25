@@ -19,15 +19,58 @@ env:
 
 jobs:
   docker:
-    name: Build and publish Docker image
+    name: Build and publish Docker image (${{ matrix.variant }})
     runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Stable: default build, gets the moving `latest` tag.
+          - variant: stable
+            maven_profiles: ""
+            latest: "true"
+          # Snapshot: built against the validator core SNAPSHOT. Never `latest`.
+          - variant: snapshot
+            maven_profiles: "snapshot"
+            latest: "false"
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+
+      # Derive the API version and the validator core version (honouring the
+      # matrix Maven profiles) straight from pom.xml so image tags can never
+      # drift from the actual build. Image name is lower-cased for GHCR.
+      - name: Compute image tags
+        id: tags
+        run: |
+          set -euo pipefail
+          PROFILE_ARG=""
+          if [ -n "${{ matrix.maven_profiles }}" ]; then
+            PROFILE_ARG="-P${{ matrix.maven_profiles }}"
+          fi
+          API_VERSION=$(mvn -q -N $PROFILE_ARG help:evaluate -Dexpression=project.version -DforceStdout)
+          VALIDATOR_VERSION=$(mvn -q -N $PROFILE_ARG help:evaluate -Dexpression=gtfs-validator.version -DforceStdout)
+          IMAGE=$(echo "${REGISTRY}/${IMAGE_NAME}" | tr '[:upper:]' '[:lower:]')
+          # Self-documenting tag: <apiVersion>-validator<validatorCoreVersion>.
+          # The `validator` infix scopes the trailing version to the validator
+          # core, not the API (the two versions evolve independently).
+          DUAL_TAG="${IMAGE}:${API_VERSION}-validator${VALIDATOR_VERSION}"
+          TAGS="${DUAL_TAG}"
+          if [ "${{ matrix.latest }}" = "true" ]; then
+            TAGS="${TAGS}"$'\n'"${IMAGE}:latest"
+          fi
+          {
+            echo "tags<<EOF"
+            echo "${TAGS}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          echo "Resolved tags:"
+          echo "${TAGS}"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
       - name: Set up Docker Buildx
@@ -41,26 +84,14 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=sha
       - name: Build and push Docker image
         uses: docker/build-push-action@v7
         with:
           context: .
+          build-args: |
+            MAVEN_PROFILES=${{ matrix.maven_profiles }}
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: ${{ steps.tags.outputs.tags }}
+          cache-from: type=gha,scope=${{ matrix.variant }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.variant }}

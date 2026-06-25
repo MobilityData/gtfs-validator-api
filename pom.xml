@@ -50,7 +50,10 @@
         <jackson-databind-nullable.version>0.2.10</jackson-databind-nullable.version>
         <jakarta-annotation.version>3.0.0</jakarta-annotation.version>
 
-        <!-- Validator core version is independent of this project's version. -->
+        <!-- Validator core version is independent of this project's version.
+             Default is the stable release. Build with -Psnapshot to override
+             this with the latest pre-release SNAPSHOT (see the snapshot profile
+             at the end of this file). -->
         <gtfs-validator.version>8.0.1</gtfs-validator.version>
 
         <!-- Patched versions overriding vulnerable validator transitive dependencies. -->
@@ -294,4 +297,34 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!-- Opt-in profile to build against a pre-release SNAPSHOT of the GTFS
+             validator core instead of the stable default. Activate with:
+                 mvn -Psnapshot ...
+             It overrides gtfs-validator.version and enables the Maven Central
+             snapshot repository (Maven only resolves *-SNAPSHOT from repos that
+             explicitly enable snapshots). The snapshot repo is public; no
+             credentials are required to consume it. Override the version on the
+             command line with -Dgtfs-validator.version=X.Y.Z-SNAPSHOT if needed. -->
+        <profile>
+            <id>snapshot</id>
+            <properties>
+                <gtfs-validator.version>8.0.2-SNAPSHOT</gtfs-validator.version>
+            </properties>
+            <repositories>
+                <repository>
+                    <id>central-snapshots</id>
+                    <name>Maven Central Snapshots</name>
+                    <url>https://central.sonatype.com/repository/maven-snapshots/</url>
+                    <releases>
+                        <enabled>false</enabled>
+                    </releases>
+                    <snapshots>
+                        <enabled>true</enabled>
+                    </snapshots>
+                </repository>
+            </repositories>
+        </profile>
+    </profiles>
 </project>
