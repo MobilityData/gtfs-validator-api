@@ -27,6 +27,9 @@ replay_pid*
 target/
 HELP.md
 
+# maven-git-versioning-extension generated pom (build artifact)
+.git-versioned-pom.xml
+
 # IDE
 .idea/
 *.iml
