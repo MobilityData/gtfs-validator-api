@@ -24,7 +24,8 @@ The API project version is **independent** of the validator core version:
 The API project version is **derived from git** by the
 [`maven-git-versioning-extension`](https://github.com/qoomon/maven-git-versioning-extension)
 (configured in `.mvn/`): a release tag `vX.Y.Z` yields version `X.Y.Z`, while any
-other build (commits on `main`, PRs, local checkouts) yields `0.0.0-SNAPSHOT`. The
+other build (commits on `main`, PRs, local checkouts) yields a patch-bumped
+SNAPSHOT of the latest tag (e.g. `1.0.1-SNAPSHOT` after `v1.0.0`). The
 `<version>` in `pom.xml` is only a placeholder and is never edited for a release —
 see [Releasing](#releasing).
 
@@ -144,13 +145,14 @@ git tag) and the validator core version. Two variants are published per build:
 
 | Variant | Example release tag | Example main-merge tag | Validator core |
 |---------|--------------------|------------------------|----------------|
-| Stable (`stable-core`) | `1.0.0-validator8.0.1` (+ `latest`) | `0.0.0-SNAPSHOT-validator8.0.1` | stable release |
-| Snapshot (`snapshot-core`) | `1.0.0-validator8.0.2-SNAPSHOT` | `0.0.0-SNAPSHOT-validator8.0.2-SNAPSHOT` | pre-release SNAPSHOT |
+| Stable (`stable-core`) | `1.0.0-validator8.0.1` (+ `latest`) | `1.0.1-SNAPSHOT-validator8.0.1` | stable release |
+| Snapshot (`snapshot-core`) | `1.0.0-validator8.0.2-SNAPSHOT` | `1.0.1-SNAPSHOT-validator8.0.2-SNAPSHOT` | pre-release SNAPSHOT |
 
 The tag format is `<apiVersion>-validator<validatorCoreVersion>`: the `validator`
 infix scopes the trailing version to the validator **core**, not the API (the two
 versions evolve independently). Both variants are published on every merge to
-`main` (as API snapshots, version `0.0.0-SNAPSHOT`) and on every release (versioned
+`main` (as API snapshots, version a patch-bumped SNAPSHOT of the latest tag, e.g.
+`1.0.1-SNAPSHOT`) and on every release (versioned
 `X.Y.Z`); the stable variant additionally gets `latest` on releases only. The
 snapshot variant is never tagged `latest`. See [Releasing](#releasing) for how
 versions are produced.
@@ -224,8 +226,9 @@ edited by hand for a release. To cut a release and publish images:
    - snapshot: `ghcr.io/<owner>/gtfs-validator-api:1.0.0-validator<coreSnapshot>`
 
 Notes:
-- Every merge to `main` publishes both variants as **API snapshots** (version
-  `0.0.0-SNAPSHOT`, e.g. `0.0.0-SNAPSHOT-validator8.0.1`), without moving `latest`.
+- Every merge to `main` publishes both variants as **API snapshots** (a
+  patch-bumped SNAPSHOT of the latest tag, e.g. `1.0.1-SNAPSHOT-validator8.0.1`
+  after `v1.0.0`), without moving `latest`.
 - A release (`v*` tag / GitHub Release) publishes both variants **versioned**
   (`X.Y.Z-…`); the stable variant also updates `latest`.
 - Pull requests build both variants to validate the Dockerfile but publish nothing.
@@ -234,17 +237,19 @@ Notes:
 ### What gets published when
 
 Image tags follow `<apiVersion>-validator<validatorCoreVersion>`. The **API version**
-comes from git (a release tag, or `0.0.0-SNAPSHOT` otherwise) and the **validator
-core version** comes from the build variant. These are independent: a `main` build
-is an *API snapshot*, which is not the same thing as the validator-core snapshot.
+comes from git (a release tag, or a patch-bumped SNAPSHOT of the latest tag
+otherwise) and the **validator core version** comes from the build variant. These
+are independent: a `main` build is an *API snapshot*, which is not the same thing
+as the validator-core snapshot.
 
-**On merge to `main`** the API version resolves to `0.0.0-SNAPSHOT`, so both variants
-publish as API snapshots (and `latest` is not moved):
+**On merge to `main`** the API version resolves to a patch-bumped SNAPSHOT of the
+latest tag (e.g. `1.0.1-SNAPSHOT` after `v1.0.0`), so both variants publish as API
+snapshots (and `latest` is not moved):
 
 | Variant | Tag |
 |---------|-----|
-| stable-core | `0.0.0-SNAPSHOT-validator8.0.1` |
-| snapshot-core | `0.0.0-SNAPSHOT-validator8.0.2-SNAPSHOT` |
+| stable-core | `1.0.1-SNAPSHOT-validator8.0.1` |
+| snapshot-core | `1.0.1-SNAPSHOT-validator8.0.2-SNAPSHOT` |
 
 **On release** (`vX.Y.Z` tag / GitHub Release) the API version resolves to `X.Y.Z`:
 
@@ -263,7 +268,7 @@ GitHub Actions workflows live in `.github/workflows/`:
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
 | `build.yml` | push / PR to `main`/`master`, manual | `mvn clean verify` — OpenAPI generation, compile, integration tests and the Spotless code-style check; uploads the built jar. |
-| `docker.yml` | push / PR / tag `v*` / release, manual | Builds two image variants (stable and validator-SNAPSHOT) via a matrix, multi-arch. On non-PR events it pushes to `ghcr.io/<owner>/gtfs-validator-api` tagged `<api>-validator<core>`: `main` merges publish API snapshots (`0.0.0-SNAPSHOT-…`), releases publish versioned images with `latest` on the stable variant. PRs build both but push neither. See [Releasing](#releasing). |
+| `docker.yml` | push / PR / tag `v*` / release, manual | Builds two image variants (stable and validator-SNAPSHOT) via a matrix, multi-arch. On non-PR events it pushes to `ghcr.io/<owner>/gtfs-validator-api` tagged `<api>-validator<core>`: `main` merges publish API snapshots (a patch-bumped SNAPSHOT of the latest tag, e.g. `1.0.1-SNAPSHOT-…`), releases publish versioned images with `latest` on the stable variant. PRs build both but push neither. See [Releasing](#releasing). |
 
 ## Configuration
 

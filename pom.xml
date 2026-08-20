@@ -8,7 +8,8 @@
     <!-- API project version is independent of the validator core version.
          This is a placeholder: the real version is derived from git at build
          time by maven-git-versioning-extension (see .mvn/). A `vX.Y.Z` tag
-         yields version X.Y.Z; any other build yields 0.0.0-SNAPSHOT. This file
+         yields version X.Y.Z; any other build yields a patch-bumped SNAPSHOT
+         of the latest tag (e.g. `1.0.1-SNAPSHOT` after `v1.0.0`). This file
          is never edited for a release. -->
     <version>0.0.0-SNAPSHOT</version>
     <packaging>jar</packaging>

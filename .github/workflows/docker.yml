@@ -49,7 +49,8 @@ jobs:
         env:
           # `latest` (and release semantics) only apply to actual releases:
           # a pushed `v*` tag or a published release. Plain merges to main build
-          # a 0.0.0-SNAPSHOT dev image and must never move `latest`.
+          # a patch-bumped SNAPSHOT dev image (e.g. 1.0.1-SNAPSHOT after v1.0.0)
+          # and must never move `latest`.
           IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'release' }}
         run: |
           set -euo pipefail
@@ -85,8 +86,9 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
       # Authenticate and push on all non-PR events: merges to main publish API
-      # snapshot images (version 0.0.0-SNAPSHOT), and `v*` tags / releases publish
-      # versioned images. Pull requests build only, to validate the Dockerfile.
+      # snapshot images (a patch-bumped SNAPSHOT of the latest tag), and `v*`
+      # tags / releases publish versioned images. Pull requests build only, to
+      # validate the Dockerfile.
       - name: Log in to the Container registry
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v4
