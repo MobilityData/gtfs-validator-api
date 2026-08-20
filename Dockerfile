@@ -29,6 +29,14 @@ FROM eclipse-temurin:17-jre
 ARG IMAGE_SOURCE="https://github.com/mobilitydata/gtfs-validator-api.git"
 LABEL org.opencontainers.image.source="${IMAGE_SOURCE}"
 
+# Override the metadata inherited from the base image, which otherwise leaves the
+# published image advertising itself as Ubuntu. CI repeats these as index
+# annotations (see docker.yml) because a LABEL does not reach the OCI index of a
+# multi-platform build.
+LABEL org.opencontainers.image.title="gtfs-validator-api"
+LABEL org.opencontainers.image.description="REST API wrapping the MobilityData GTFS validator."
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+
 RUN groupadd -r spring && useradd -r -g spring spring
 
 WORKDIR /app

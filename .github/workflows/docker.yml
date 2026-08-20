@@ -62,9 +62,14 @@ jobs:
           VALIDATOR_VERSION=$(mvn -q -N $PROFILE_ARG help:evaluate -Dexpression=gtfs-validator.version -DforceStdout)
           IMAGE=$(echo "${REGISTRY}/${IMAGE_NAME}" | tr '[:upper:]' '[:lower:]')
           # Fork-aware OCI source URL (lower-cased) so the package links to the
-          # repo it was built from, not a hardcoded upstream.
+          # repo it was built from, not a hardcoded upstream. Two forms:
+          #   image_source - clone URL, for the Dockerfile LABEL (single-arch builds)
+          #   image_url    - bare repo URL, for the index annotation. GHCR matches
+          #                  the plain https://github.com/OWNER/REPO form when it
+          #                  links a package to its repository.
           REPO_LC=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
           echo "image_source=https://github.com/${REPO_LC}.git" >> "$GITHUB_OUTPUT"
+          echo "image_url=https://github.com/${REPO_LC}" >> "$GITHUB_OUTPUT"
           # Self-documenting tag: <apiVersion>-validator<validatorCoreVersion>.
           # The `validator` infix scopes the trailing version to the validator
           # core, not the API (the two versions evolve independently).
@@ -103,6 +108,19 @@ jobs:
           build-args: |
             MAVEN_PROFILES=${{ matrix.maven_profiles }}
             IMAGE_SOURCE=${{ steps.tags.outputs.image_source }}
+          # A Dockerfile LABEL only reaches the per-platform image configs, never
+          # the OCI image index that a multi-platform push produces - and the index
+          # is what GHCR reads to link a package to its source repository. Without
+          # these `index:` annotations the package stays unlinked and the repo's
+          # Packages section never appears. The LABEL is kept as well: it is what
+          # single-arch and local builds carry.
+          annotations: |
+            index:org.opencontainers.image.source=${{ steps.tags.outputs.image_url }}
+            index:org.opencontainers.image.url=${{ steps.tags.outputs.image_url }}
+            index:org.opencontainers.image.title=gtfs-validator-api
+            index:org.opencontainers.image.description=REST API wrapping the MobilityData GTFS validator.
+            index:org.opencontainers.image.licenses=Apache-2.0
+            index:org.opencontainers.image.revision=${{ github.sha }}
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.tags.outputs.tags }}
