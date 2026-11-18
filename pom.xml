@@ -62,7 +62,7 @@
         <gtfs-validator.version>8.0.1</gtfs-validator.version>
 
         <!-- Patched versions overriding vulnerable validator transitive dependencies. -->
-        <guava.version>33.6.0-jre</guava.version>
+        <guava.version>33.7.1-jre</guava.version>
         <commons-compress.version>1.28.0</commons-compress.version>
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
         <commons-validator.version>1.10.1</commons-validator.version>
