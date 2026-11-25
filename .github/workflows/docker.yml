@@ -11,6 +11,11 @@ on:
       - main
   release:
     types: [published]
+  # Nightly (or manual) rebuild of the snapshot variant, so it follows the validator core
+  # SNAPSHOT published on every merge to the validator's master.
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
 
 env:
   # Publish to the GitHub Container Registry under the owning org/repo.
@@ -27,15 +32,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        variant: [ stable, snapshot ]
         include:
           # Stable: default build, gets the moving `latest` tag.
           - variant: stable
             maven_profiles: ""
             latest: "true"
-          # Snapshot: built against the validator core SNAPSHOT. Never `latest`.
+          # Snapshot: built against the newest validator core SNAPSHOT. Never `latest`.
           - variant: snapshot
             maven_profiles: "snapshot"
             latest: "false"
+        # The nightly and manual runs only rebuild the snapshot variant.
+        exclude:
+          - variant: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'stable' || 'none' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -58,8 +67,15 @@ jobs:
           if [ -n "${{ matrix.maven_profiles }}" ]; then
             PROFILE_ARG="-P${{ matrix.maven_profiles }}"
           fi
+          # The snapshot variant uses the newest validator core SNAPSHOT, which is not pinned.
+          VERSION_ARG=""
+          if [ "${{ matrix.variant }}" = "snapshot" ]; then
+            SNAPSHOT_VERSION=$(scripts/latest-validator-snapshot.sh)
+            VERSION_ARG="-Dgtfs-validator.version=${SNAPSHOT_VERSION}"
+            echo "validator_version=${SNAPSHOT_VERSION}" >> "$GITHUB_OUTPUT"
+          fi
           API_VERSION=$(mvn -q -N $PROFILE_ARG help:evaluate -Dexpression=project.version -DforceStdout)
-          VALIDATOR_VERSION=$(mvn -q -N $PROFILE_ARG help:evaluate -Dexpression=gtfs-validator.version -DforceStdout)
+          VALIDATOR_VERSION=$(mvn -q -N $PROFILE_ARG ${VERSION_ARG:+"$VERSION_ARG"} help:evaluate -Dexpression=gtfs-validator.version -DforceStdout)
           IMAGE=$(echo "${REGISTRY}/${IMAGE_NAME}" | tr '[:upper:]' '[:lower:]')
           # Fork-aware OCI source URL (lower-cased) so the package links to the
           # repo it was built from, not a hardcoded upstream. Two forms:
@@ -107,6 +123,7 @@ jobs:
           context: .
           build-args: |
             MAVEN_PROFILES=${{ matrix.maven_profiles }}
+            GTFS_VALIDATOR_VERSION=${{ steps.tags.outputs.validator_version }}
             IMAGE_SOURCE=${{ steps.tags.outputs.image_source }}
           # A Dockerfile LABEL only reaches the per-platform image configs, never
           # the OCI image index that a multi-platform push produces - and the index

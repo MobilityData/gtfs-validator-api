@@ -1,0 +1,11 @@
+version: 2
+updates:
+  # Opens a PR bumping gtfs-validator.version once a new GTFS validator release is on Maven Central.
+  - package-ecosystem: maven
+    directory: "/"
+    schedule:
+      interval: daily
+    allow:
+      - dependency-name: "org.mobilitydata.gtfs-validator:*"
+    commit-message:
+      prefix: "build(deps)"

@@ -8,16 +8,21 @@ WORKDIR /workspace
 # against a pre-release SNAPSHOT of the GTFS validator core). Empty by default,
 # which produces a stable build.
 ARG MAVEN_PROFILES=""
+# Optional validator core version, e.g. the newest SNAPSHOT printed by
+# scripts/latest-validator-snapshot.sh. Empty by default: pom.xml decides.
+ARG GTFS_VALIDATOR_VERSION=""
 
 # Cache dependencies first.
 COPY pom.xml .
 COPY .openapi-generator-ignore .
-RUN mvn -B -q ${MAVEN_PROFILES:+-P}${MAVEN_PROFILES} dependency:go-offline
+RUN mvn -B -q ${MAVEN_PROFILES:+-P}${MAVEN_PROFILES} \
+    ${GTFS_VALIDATOR_VERSION:+-Dgtfs-validator.version=}${GTFS_VALIDATOR_VERSION} dependency:go-offline
 
 # Build the application.
 COPY src ./src
 COPY docs ./docs
-RUN mvn -B -q ${MAVEN_PROFILES:+-P}${MAVEN_PROFILES} clean package -DskipTests
+RUN mvn -B -q ${MAVEN_PROFILES:+-P}${MAVEN_PROFILES} \
+    ${GTFS_VALIDATOR_VERSION:+-Dgtfs-validator.version=}${GTFS_VALIDATOR_VERSION} clean package -DskipTests
 
 # --- Runtime stage -----------------------------------------------------------
 FROM eclipse-temurin:17-jre

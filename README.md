@@ -18,7 +18,7 @@ The API project version is **independent** of the validator core version:
 | Version | Where | Current |
 |---------|-------|---------|
 | API project version | git tag `vX.Y.Z` (derived at build time) | see releases |
-| Validator core (dependency) | `gtfs-validator.version` property | `8.0.1` |
+| Validator core (dependency) | `gtfs-validator.version` property | see `pom.xml` (see [Validator updates](#validator-updates)) |
 | OpenAPI spec version | `docs/GTFSValidatorAPI.yaml` `info.version` | `2.0.0` |
 
 The API project version is **derived from git** by the
@@ -61,16 +61,18 @@ mvn verify             # also runs the spotless code-style check
 
 ### Building against a validator SNAPSHOT
 
-The default build uses the stable validator core release (`gtfs-validator.version`,
-currently `8.0.1`). To build against a pre-release **SNAPSHOT** of the validator
-core instead, activate the opt-in `snapshot` profile:
+The default build uses the stable validator core release (`gtfs-validator.version`
+in `pom.xml`). To build against a pre-release **SNAPSHOT** of the validator core
+instead, activate the opt-in `snapshot` profile and pass the snapshot version, for
+example the newest one:
 
 ```bash
-mvn -Psnapshot clean package      # uses the pinned snapshot (8.0.2-SNAPSHOT)
-
-# override the snapshot version explicitly:
-mvn -Psnapshot -Dgtfs-validator.version=8.0.2-SNAPSHOT clean package
+mvn -Psnapshot -Dgtfs-validator.version=$(scripts/latest-validator-snapshot.sh) clean package
 ```
+
+The snapshot version is not pinned in `pom.xml`: the validator's snapshot version
+changes with each of its releases (e.g. `8.1.1-SNAPSHOT` after `8.1.0`). Without
+`-Dgtfs-validator.version`, the profile builds the stable release.
 
 The profile enables the public [Maven Central snapshot repository][central-snapshots]
 (no credentials needed) — required because Maven only resolves `-SNAPSHOT`
@@ -134,7 +136,9 @@ To build an image against a validator-core SNAPSHOT, pass the `MAVEN_PROFILES`
 build arg:
 
 ```bash
-docker build --build-arg MAVEN_PROFILES=snapshot -t gtfs-validator-api:snapshot .
+docker build --build-arg MAVEN_PROFILES=snapshot \
+  --build-arg GTFS_VALIDATOR_VERSION=$(scripts/latest-validator-snapshot.sh) \
+  -t gtfs-validator-api:snapshot .
 ```
 
 ### Pre-built image
@@ -176,8 +180,8 @@ docker run --rm -p 8080:8080 \
 ```
 
 **Snapshot** — for trying the latest validator core before it is released; built
-against a `-SNAPSHOT` of the validator. The tag is re-published as the upstream
-snapshot moves, so re-pull to get the newest build:
+against the newest `-SNAPSHOT` of the validator. The image is rebuilt every night
+and its tag re-published, so re-pull to get the newest build:
 
 ```bash
 docker pull ghcr.io/mobilitydata/gtfs-validator-api:1.0.0-validator8.0.2-SNAPSHOT
@@ -231,6 +235,8 @@ Notes:
   after `v1.0.0`), without moving `latest`.
 - A release (`v*` tag / GitHub Release) publishes both variants **versioned**
   (`X.Y.Z-…`); the stable variant also updates `latest`.
+- The snapshot variant is also rebuilt every night, or on a manual run of
+  `docker.yml`, against the newest validator core SNAPSHOT.
 - Pull requests build both variants to validate the Dockerfile but publish nothing.
 - The tag must match `v` + semver (e.g. `v1.2.3`); other tags don't set the version.
 
@@ -261,6 +267,17 @@ snapshots (and `latest` is not moved):
 **On pull requests** both variants build (to validate the Dockerfile) but nothing is
 published.
 
+## Validator updates
+
+- **GTFS validator release:** once the release is on Maven Central, Dependabot
+  (`.github/dependabot.yml`) opens a PR bumping `gtfs-validator.version`. Check the
+  PR's build, merge it, then cut a release (see [Releasing](#releasing)) so that
+  `latest` uses the new validator.
+- **Merge to the validator's `master`:** nothing to do. A new validator core SNAPSHOT is
+  published, and the nightly `docker.yml` run rebuilds the snapshot image against
+  it. To rebuild it right away, run `docker.yml` manually (Actions tab, _Run
+  workflow_).
+
 ## Continuous integration
 
 GitHub Actions workflows live in `.github/workflows/`:
@@ -268,7 +285,7 @@ GitHub Actions workflows live in `.github/workflows/`:
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
 | `build.yml` | push / PR to `main`/`master`, manual | `mvn clean verify` — OpenAPI generation, compile, integration tests and the Spotless code-style check; uploads the built jar. |
-| `docker.yml` | push / PR / tag `v*` / release, manual | Builds two image variants (stable and validator-SNAPSHOT) via a matrix, multi-arch. On non-PR events it pushes to `ghcr.io/<owner>/gtfs-validator-api` tagged `<api>-validator<core>`: `main` merges publish API snapshots (a patch-bumped SNAPSHOT of the latest tag, e.g. `1.0.1-SNAPSHOT-…`), releases publish versioned images with `latest` on the stable variant. PRs build both but push neither. See [Releasing](#releasing). |
+| `docker.yml` | push / PR / tag `v*` / release; nightly and manual (snapshot variant only) | Builds two image variants (stable and validator-SNAPSHOT) via a matrix, multi-arch. On non-PR events it pushes to `ghcr.io/<owner>/gtfs-validator-api` tagged `<api>-validator<core>`: `main` merges publish API snapshots (a patch-bumped SNAPSHOT of the latest tag, e.g. `1.0.1-SNAPSHOT-…`), releases publish versioned images with `latest` on the stable variant. PRs build both but push neither. See [Releasing](#releasing). |
 
 ## Configuration
 
