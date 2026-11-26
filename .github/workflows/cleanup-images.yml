@@ -1,0 +1,38 @@
+name: Clean up old Docker images
+
+# Deletes old untagged images from the GHCR package. Every push of a moving tag
+# (the nightly snapshot rebuild, merges to main) leaves the previous image
+# untagged, and these pile up. Tagged images (releases, `latest`, the current
+# snapshots) are never deleted.
+on:
+  schedule:
+    - cron: '0 6 * * 0' # weekly, Sunday 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Only list what would be deleted
+        type: boolean
+        default: true
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      # Multi-arch aware: a multi-platform image is an untagged-by-design index plus
+      # per-platform manifests and attestations, which a plain "delete untagged
+      # versions" would remove from under tagged images.
+      - uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1.2.2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          package: gtfs-validator-api
+          delete-untagged: true
+          # Attestations/signatures whose image is gone.
+          delete-orphaned-images: true
+          # Leave recent images alone, e.g. one a build is still pushing.
+          older-than: 7 days
+          # Check that the remaining multi-arch images are complete.
+          validate: true
+          # Manual runs default to a dry run; scheduled runs delete.
+          dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run }}

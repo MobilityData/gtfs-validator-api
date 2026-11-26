@@ -11,6 +11,11 @@ on:
       - main
   release:
     types: [published]
+  # Nightly (or manual) rebuild of the snapshot variant, so it follows the validator core
+  # SNAPSHOT published on every merge to the validator's master.
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
 
 env:
   # Publish to the GitHub Container Registry under the owning org/repo.
@@ -27,15 +32,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        variant: [ stable, snapshot ]
         include:
           # Stable: default build, gets the moving `latest` tag.
           - variant: stable
             maven_profiles: ""
             latest: "true"
-          # Snapshot: built against the validator core SNAPSHOT. Never `latest`.
+          # Snapshot: built against the newest validator core SNAPSHOT. Never `latest`.
           - variant: snapshot
             maven_profiles: "snapshot"
             latest: "false"
+        # The nightly and manual runs only rebuild the snapshot variant.
+        exclude:
+          - variant: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'stable' || 'none' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -52,14 +61,30 @@ jobs:
           # a patch-bumped SNAPSHOT dev image (e.g. 1.0.1-SNAPSHOT after v1.0.0)
           # and must never move `latest`.
           IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'release' }}
+          # scripts/validator-commit.sh reads the public gtfs-validator repo with the GitHub CLI.
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           PROFILE_ARG=""
           if [ -n "${{ matrix.maven_profiles }}" ]; then
             PROFILE_ARG="-P${{ matrix.maven_profiles }}"
           fi
+          # The snapshot variant uses the newest validator core SNAPSHOT, which is not pinned.
+          VERSION_ARG=""
+          if [ "${{ matrix.variant }}" = "snapshot" ]; then
+            SNAPSHOT_VERSION=$(scripts/latest-validator-snapshot.sh)
+            VERSION_ARG="-Dgtfs-validator.version=${SNAPSHOT_VERSION}"
+            echo "validator_version=${SNAPSHOT_VERSION}" >> "$GITHUB_OUTPUT"
+          fi
           API_VERSION=$(mvn -q -N $PROFILE_ARG help:evaluate -Dexpression=project.version -DforceStdout)
-          VALIDATOR_VERSION=$(mvn -q -N $PROFILE_ARG help:evaluate -Dexpression=gtfs-validator.version -DforceStdout)
+          VALIDATOR_VERSION=$(mvn -q -N $PROFILE_ARG ${VERSION_ARG:+"$VERSION_ARG"} help:evaluate -Dexpression=gtfs-validator.version -DforceStdout)
+          # The gtfs-validator commit the validator core was built from. It is passed to the
+          # image build: a SNAPSHOT version string doesn't change between uploads, so without it
+          # the cached Maven layers would keep the previous validator jars. It is also recorded
+          # on the image (label + index annotation).
+          VALIDATOR_COMMIT=$(scripts/validator-commit.sh "$VALIDATOR_VERSION")
+          echo "validator_commit=${VALIDATOR_COMMIT}" >> "$GITHUB_OUTPUT"
+          echo "Validator ${VALIDATOR_VERSION} commit: ${VALIDATOR_COMMIT}"
           IMAGE=$(echo "${REGISTRY}/${IMAGE_NAME}" | tr '[:upper:]' '[:lower:]')
           # Fork-aware OCI source URL (lower-cased) so the package links to the
           # repo it was built from, not a hardcoded upstream. Two forms:
@@ -90,12 +115,14 @@ jobs:
         uses: docker/setup-qemu-action@v4
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
-      # Authenticate and push on all non-PR events: merges to main publish API
-      # snapshot images (a patch-bumped SNAPSHOT of the latest tag), and `v*`
-      # tags / releases publish versioned images. Pull requests build only, to
-      # validate the Dockerfile.
+      # Authenticate and push only from main and `v*` tags: merges to main (and the
+      # nightly/manual runs on main) publish API snapshot images (a patch-bumped
+      # SNAPSHOT of the latest tag), and `v*` tags / releases publish versioned
+      # images. Pull requests, and manual runs from any other branch, build only:
+      # every branch builds as the same API SNAPSHOT version, so pushing from one
+      # would replace main's image.
       - name: Log in to the Container registry
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
         uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
@@ -107,6 +134,8 @@ jobs:
           context: .
           build-args: |
             MAVEN_PROFILES=${{ matrix.maven_profiles }}
+            GTFS_VALIDATOR_VERSION=${{ steps.tags.outputs.validator_version }}
+            VALIDATOR_COMMIT=${{ steps.tags.outputs.validator_commit }}
             IMAGE_SOURCE=${{ steps.tags.outputs.image_source }}
           # A Dockerfile LABEL only reaches the per-platform image configs, never
           # the OCI image index that a multi-platform push produces - and the index
@@ -121,8 +150,9 @@ jobs:
             index:org.opencontainers.image.description=REST API wrapping the MobilityData GTFS validator.
             index:org.opencontainers.image.licenses=Apache-2.0
             index:org.opencontainers.image.revision=${{ github.sha }}
+            index:org.mobilitydata.gtfs-validator.revision=${{ steps.tags.outputs.validator_commit }}
           platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
+          push: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
           tags: ${{ steps.tags.outputs.tags }}
           cache-from: type=gha,scope=${{ matrix.variant }}
           cache-to: type=gha,mode=max,scope=${{ matrix.variant }}
