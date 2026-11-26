@@ -136,9 +136,21 @@ To build an image against a validator-core SNAPSHOT, pass the `MAVEN_PROFILES`
 build arg:
 
 ```bash
+SNAPSHOT_VERSION=$(scripts/latest-validator-snapshot.sh)
 docker build --build-arg MAVEN_PROFILES=snapshot \
-  --build-arg GTFS_VALIDATOR_VERSION=$(scripts/latest-validator-snapshot.sh) \
+  --build-arg GTFS_VALIDATOR_VERSION=$SNAPSHOT_VERSION \
+  --build-arg VALIDATOR_COMMIT=$(scripts/validator-commit.sh $SNAPSHOT_VERSION) \
   -t gtfs-validator-api:snapshot .
+```
+
+`VALIDATOR_COMMIT` is the gtfs-validator commit the SNAPSHOT was built from (needs the
+GitHub CLI). It changes with each upload of the SNAPSHOT (its version string does not),
+so Docker rebuilds the Maven layers instead of reusing cached validator jars. Images
+record it in the `org.mobilitydata.gtfs-validator.revision` label and index annotation:
+
+```bash
+docker buildx imagetools inspect ghcr.io/mobilitydata/gtfs-validator-api:<tag> \
+  --format '{{ index .Manifest.Annotations "org.mobilitydata.gtfs-validator.revision" }}'
 ```
 
 ### Pre-built image
@@ -238,6 +250,8 @@ Notes:
 - The snapshot variant is also rebuilt every night, or on a manual run of
   `docker.yml`, against the newest validator core SNAPSHOT.
 - Pull requests build both variants to validate the Dockerfile but publish nothing.
+  So does a manual run from any branch other than `main`: every branch builds as the
+  same API SNAPSHOT version, so publishing from one would replace `main`'s image.
 - The tag must match `v` + semver (e.g. `v1.2.3`); other tags don't set the version.
 
 ### What gets published when
@@ -275,8 +289,8 @@ published.
   `latest` uses the new validator.
 - **Merge to the validator's `master`:** nothing to do. A new validator core SNAPSHOT is
   published, and the nightly `docker.yml` run rebuilds the snapshot image against
-  it. To rebuild it right away, run `docker.yml` manually (Actions tab, _Run
-  workflow_).
+  it. To rebuild it right away, run `docker.yml` manually on `main` (Actions tab,
+  _Run workflow_).
 
 Dependabot also keeps the other dependencies up to date: one grouped PR for the
 other Maven dependencies (daily), one for GitHub Actions and one for the Dockerfile
@@ -290,6 +304,7 @@ GitHub Actions workflows live in `.github/workflows/`:
 |----------|---------|---------|
 | `build.yml` | push / PR to `main`/`master`, manual | `mvn clean verify` — OpenAPI generation, compile, integration tests and the Spotless code-style check; uploads the built jar. |
 | `docker.yml` | push / PR / tag `v*` / release; nightly and manual (snapshot variant only) | Builds two image variants (stable and validator-SNAPSHOT) via a matrix, multi-arch. On non-PR events it pushes to `ghcr.io/<owner>/gtfs-validator-api` tagged `<api>-validator<core>`: `main` merges publish API snapshots (a patch-bumped SNAPSHOT of the latest tag, e.g. `1.0.1-SNAPSHOT-…`), releases publish versioned images with `latest` on the stable variant. PRs build both but push neither. See [Releasing](#releasing). |
+| `cleanup-images.yml` | weekly, manual (dry run by default) | Deletes untagged images older than 7 days from the GHCR package (left behind each time a moving tag such as the nightly snapshot is re-pushed). Tagged images are kept. |
 
 ## Configuration
 
