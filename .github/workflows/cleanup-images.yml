@@ -23,7 +23,7 @@ jobs:
       # Multi-arch aware: a multi-platform image is an untagged-by-design index plus
       # per-platform manifests and attestations, which a plain "delete untagged
       # versions" would remove from under tagged images.
-      - uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1.2.2
+      - uses: dataaxiom/ghcr-cleanup-action@ac45a8c04b1eb4b27974ca79a0a74f344c93664b # v1.3.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           package: gtfs-validator-api
