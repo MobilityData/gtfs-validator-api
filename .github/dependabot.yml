@@ -1,11 +1,43 @@
 version: 2
 updates:
-  # Opens a PR bumping gtfs-validator.version once a new GTFS validator release is on Maven Central.
+  # Maven dependencies. A new GTFS validator release on Maven Central gets its own PR
+  # bumping gtfs-validator.version; all other Maven updates are grouped into one PR.
   - package-ecosystem: maven
     directory: "/"
     schedule:
       interval: daily
-    allow:
-      - dependency-name: "org.mobilitydata.gtfs-validator:*"
+    groups:
+      maven-dependencies:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "org.mobilitydata.gtfs-validator:*"
+    commit-message:
+      prefix: "build(deps)"
+
+  # GitHub Actions used by the workflows in .github/workflows.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "ci(deps)"
+
+  # Base images in the Dockerfile. Major updates are ignored so the image stays on Java 17.
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      docker-images:
+        patterns:
+          - "*"
     commit-message:
       prefix: "build(deps)"

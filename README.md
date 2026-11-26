@@ -278,6 +278,10 @@ published.
   it. To rebuild it right away, run `docker.yml` manually (Actions tab, _Run
   workflow_).
 
+Dependabot also keeps the other dependencies up to date: one grouped PR for the
+other Maven dependencies (daily), one for GitHub Actions and one for the Dockerfile
+base images (weekly, minor and patch only so the image stays on Java 17).
+
 ## Continuous integration
 
 GitHub Actions workflows live in `.github/workflows/`:
